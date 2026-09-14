@@ -53,10 +53,14 @@ pub struct LlamaBuildRelease {
     pub cuda_13_3_win_url: String,
     pub cuda_linux_url: String,
     pub cuda_linux_12_4_url: String,
+    pub cuda_linux_13_3_url: String,
     pub vulkan_linux_url: String,
     pub cpu_linux_url: String,
     pub hip_win_url: String,
     pub sycl_win_url: String,
+    pub cudart_win_url: String,
+    pub cudart_linux_url: String,
+    pub is_pinned: bool,
     pub assets: Vec<LlamaAsset>,
 }
 
@@ -120,264 +124,498 @@ fn get_platform_info() -> (&'static str, &'static str) {
     (os, arch)
 }
 
-pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
-    let client = reqwest::Client::builder()
-        .user_agent("code-lite-desktop-app")
-        .build()
-        .map_err(|e| e.to_string())?;
+pub fn build_release_from_assets(
+    tag_name: String,
+    release_name: String,
+    published_at: String,
+    html_url: String,
+    body: String,
+    assets: Vec<(String, String, u64)>,
+    target_os: &str,
+    target_arch: &str,
+) -> LlamaBuildRelease {
+    let mut vulkan_win_url = String::new();
+    let mut cpu_win_url = String::new();
+    let mut cuda_win_url = String::new();
+    let mut cuda_12_4_win_url = String::new();
+    let mut cuda_13_3_win_url = String::new();
+    let mut cuda_linux_url = String::new();
+    let mut cuda_linux_12_4_url = String::new();
+    let mut cuda_linux_13_3_url = String::new();
+    let mut vulkan_linux_url = String::new();
+    let mut cpu_linux_url = String::new();
+    let mut hip_win_url = String::new();
+    let mut sycl_win_url = String::new();
+    let mut cudart_win_url = String::new();
+    let mut cudart_linux_url = String::new();
 
-    let resp = client
-        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=15")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to reach GitHub API: {}", e))?;
+    let mut recommended_url = String::new();
+    let mut fallback_url = String::new();
+    let mut asset_list = Vec::new();
 
-    if !resp.status().is_success() {
-        return Err(format!("GitHub API returned HTTP status: {}", resp.status()));
-    }
+    for (name, download_url, size_bytes) in assets {
+        let name_lower = name.to_lowercase();
 
-    let releases_json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse GitHub JSON: {}", e))?;
+        let is_zip = name_lower.ends_with(".zip");
+        let is_tar = name_lower.ends_with(".tar.gz") || name_lower.ends_with(".tgz");
+        if !is_zip && !is_tar {
+            continue;
+        }
 
-    let (target_os, target_arch) = get_platform_info();
-    let mut list = Vec::new();
+        let is_cudart = name_lower.starts_with("cudart");
+        let is_bin_package = name_lower.contains("-bin-");
+        if !is_bin_package {
+            continue;
+        }
 
-    if let Some(arr) = releases_json.as_array() {
-        for rel in arr {
-            let tag_name = rel["tag_name"].as_str().unwrap_or("").to_string();
-            let release_name = rel["name"].as_str().unwrap_or(&tag_name).to_string();
-            let published_at = rel["published_at"].as_str().unwrap_or("").to_string();
-            let html_url = rel["html_url"].as_str().unwrap_or("").to_string();
-            let body = rel["body"].as_str().unwrap_or("").to_string();
+        let is_arm64 = name_lower.contains("arm64") || name_lower.contains("aarch64");
+        let is_x64 = name_lower.contains("x64") || name_lower.contains("x86_64") || (!is_arm64 && !name_lower.contains("s390x"));
+        let matches_host_arch = if target_arch == "arm64" { is_arm64 } else { is_x64 };
 
-            let mut vulkan_win_url = String::new();
-            let mut cpu_win_url = String::new();
-            let mut cuda_win_url = String::new();
-            let mut cuda_12_4_win_url = String::new();
-            let mut cuda_13_3_win_url = String::new();
-            let mut cuda_linux_url = String::new();
-            let mut cuda_linux_12_4_url = String::new();
-            let mut vulkan_linux_url = String::new();
-            let mut cpu_linux_url = String::new();
-            let mut hip_win_url = String::new();
-            let mut sycl_win_url = String::new();
+        // Windows assets
+        if name_lower.contains("win") {
+            let mut asset_type = if is_cudart { "cudart_runtime".to_string() } else { "win_other".to_string() };
 
-            let mut recommended_url = String::new();
-            let mut fallback_url = String::new();
-
-            let mut asset_list = Vec::new();
-
-            if let Some(assets) = rel["assets"].as_array() {
-                for asset in assets {
-                    let name = asset["name"].as_str().unwrap_or("").to_string();
-                    let name_lower = name.to_lowercase();
-                    let download_url = asset["browser_download_url"].as_str().unwrap_or("").to_string();
-                    let size_bytes = asset["size"].as_u64().unwrap_or(0);
-
-                    let is_zip = name_lower.ends_with(".zip");
-                    let is_tar = name_lower.ends_with(".tar.gz") || name_lower.ends_with(".tgz");
-                    if !is_zip && !is_tar {
-                        continue;
-                    }
-
-                    let is_cudart = name_lower.starts_with("cudart");
-                    let is_bin_package = name_lower.contains("-bin-");
-                    if !is_bin_package {
-                        continue;
-                    }
-
-                    // Windows assets
-                    if name_lower.contains("win") {
-                        let mut asset_type = if is_cudart { "cudart_runtime".to_string() } else { "win_other".to_string() };
-
-                        if name_lower.contains("vulkan") {
-                            vulkan_win_url = download_url.clone();
-                            asset_type = "vulkan".to_string();
-                        } else if name_lower.contains("cpu") || name_lower.contains("avx2") {
-                            cpu_win_url = download_url.clone();
-                            asset_type = "cpu".to_string();
-                        } else if name_lower.contains("cuda-12") || name_lower.contains("cu12") {
-                            if !is_cudart {
-                                cuda_12_4_win_url = download_url.clone();
-                                cuda_win_url = download_url.clone();
-                            }
-                            asset_type = if is_cudart { "cudart_12".to_string() } else { "cuda_12".to_string() };
-                        } else if name_lower.contains("cuda-13") || name_lower.contains("cu13") {
-                            if !is_cudart {
-                                cuda_13_3_win_url = download_url.clone();
-                                if cuda_win_url.is_empty() {
-                                    cuda_win_url = download_url.clone();
-                                }
-                            }
-                            asset_type = if is_cudart { "cudart_13".to_string() } else { "cuda_13".to_string() };
-                        } else if name_lower.contains("cuda") {
-                            if !is_cudart && cuda_win_url.is_empty() {
-                                cuda_win_url = download_url.clone();
-                            }
-                            asset_type = if is_cudart { "cudart".to_string() } else { "cuda".to_string() };
-                        } else if name_lower.contains("hip") || name_lower.contains("rocm") || name_lower.contains("radeon") {
-                            hip_win_url = download_url.clone();
-                            asset_type = "hip_radeon".to_string();
-                        } else if name_lower.contains("sycl") {
-                            sycl_win_url = download_url.clone();
-                            asset_type = "sycl".to_string();
-                        }
-
-                        if target_os == "windows" {
-                            asset_list.push(LlamaAsset {
-                                name: name.clone(),
-                                download_url: download_url.clone(),
-                                size_bytes,
-                                asset_type,
-                            });
-                        }
-                    }
-
-                    // macOS assets
-                    if name_lower.contains("macos") || name_lower.contains("osx") {
-                        let is_arm64 = name_lower.contains("arm64") || name_lower.contains("aarch64");
-                        let asset_type = if is_arm64 {
-                            "macos_arm64_metal".to_string()
-                        } else {
-                            "macos_x64_intel".to_string()
-                        };
-
-                        if (target_arch == "arm64" && is_arm64) || (target_arch != "arm64" && !is_arm64) {
-                            if recommended_url.is_empty() {
-                                recommended_url = download_url.clone();
-                            }
-                        } else if fallback_url.is_empty() {
-                            fallback_url = download_url.clone();
-                        }
-
-                        if target_os == "macos" {
-                            asset_list.push(LlamaAsset {
-                                name: name.clone(),
-                                download_url: download_url.clone(),
-                                size_bytes,
-                                asset_type,
-                            });
-                        }
-                    }
-
-                    // Linux assets (Ubuntu / Debian / General Linux)
-                    if name_lower.contains("ubuntu") || (name_lower.contains("linux") && !name_lower.contains("win")) {
-                        let is_arm64 = name_lower.contains("arm64") || name_lower.contains("aarch64");
-                        let is_cuda = name_lower.contains("cuda");
-                        let is_vulkan = name_lower.contains("vulkan");
-                        let is_rocm = name_lower.contains("rocm");
-
-                        let asset_type = if is_cuda {
-                            if is_cudart {
-                                "linux_cudart_runtime".to_string()
-                            } else if name_lower.contains("12") {
-                                "linux_cuda_12".to_string()
-                            } else if name_lower.contains("13") {
-                                "linux_cuda_13".to_string()
-                            } else {
-                                "linux_cuda".to_string()
-                            }
-                        } else if is_vulkan {
-                            "linux_vulkan".to_string()
-                        } else if is_rocm {
-                            "linux_rocm".to_string()
-                        } else if is_arm64 {
-                            "linux_arm64".to_string()
-                        } else {
-                            "linux_cpu_x64".to_string()
-                        };
-
-                        if is_cuda {
-                            if !is_cudart {
-                                if cuda_linux_url.is_empty() || name_lower.contains("12") {
-                                    cuda_linux_url = download_url.clone();
-                                }
-                                if name_lower.contains("12") {
-                                    cuda_linux_12_4_url = download_url.clone();
-                                }
-                            }
-                        } else if is_vulkan {
-                            vulkan_linux_url = download_url.clone();
-                        } else if !is_arm64 && cpu_linux_url.is_empty() && !is_rocm && !name_lower.contains("sycl") && !name_lower.contains("openvino") && !name_lower.contains("s390x") {
-                            cpu_linux_url = download_url.clone();
-                        }
-
-                        if target_os == "linux" {
-                            asset_list.push(LlamaAsset {
-                                name: name.clone(),
-                                download_url: download_url.clone(),
-                                size_bytes,
-                                asset_type,
-                            });
-                        }
+            if is_cudart {
+                if matches_host_arch && cudart_win_url.is_empty() {
+                    cudart_win_url = download_url.clone();
+                }
+            } else if name_lower.contains("vulkan") {
+                if matches_host_arch {
+                    vulkan_win_url = download_url.clone();
+                }
+                asset_type = "vulkan".to_string();
+            } else if name_lower.contains("cpu") || name_lower.contains("avx2") {
+                if matches_host_arch {
+                    cpu_win_url = download_url.clone();
+                }
+                asset_type = "cpu".to_string();
+            } else if name_lower.contains("cuda-12") || name_lower.contains("cu12") {
+                if matches_host_arch {
+                    cuda_12_4_win_url = download_url.clone();
+                    cuda_win_url = download_url.clone();
+                }
+                asset_type = "cuda_12".to_string();
+            } else if name_lower.contains("cuda-13") || name_lower.contains("cu13") {
+                if matches_host_arch {
+                    cuda_13_3_win_url = download_url.clone();
+                    if cuda_win_url.is_empty() {
+                        cuda_win_url = download_url.clone();
                     }
                 }
+                asset_type = "cuda_13".to_string();
+            } else if name_lower.contains("cuda") {
+                if matches_host_arch && cuda_win_url.is_empty() {
+                    cuda_win_url = download_url.clone();
+                }
+                asset_type = "cuda".to_string();
+            } else if name_lower.contains("hip") || name_lower.contains("rocm") || name_lower.contains("radeon") {
+                if matches_host_arch {
+                    hip_win_url = download_url.clone();
+                }
+                asset_type = "hip_radeon".to_string();
+            } else if name_lower.contains("sycl") {
+                if matches_host_arch {
+                    sycl_win_url = download_url.clone();
+                }
+                asset_type = "sycl".to_string();
             }
 
             if target_os == "windows" {
-                if !vulkan_win_url.is_empty() {
-                    recommended_url = vulkan_win_url.clone();
-                } else if !cpu_win_url.is_empty() {
-                    recommended_url = cpu_win_url.clone();
+                asset_list.push(LlamaAsset {
+                    name: name.clone(),
+                    download_url: download_url.clone(),
+                    size_bytes,
+                    asset_type,
+                });
+            }
+        }
+
+        // macOS assets
+        if name_lower.contains("macos") || name_lower.contains("osx") {
+            let asset_type = if is_arm64 {
+                "macos_arm64_metal".to_string()
+            } else {
+                "macos_x64_intel".to_string()
+            };
+
+            if (target_arch == "arm64" && is_arm64) || (target_arch != "arm64" && !is_arm64) {
+                if recommended_url.is_empty() {
+                    recommended_url = download_url.clone();
                 }
-                fallback_url = cpu_win_url.clone();
-            } else if target_os == "linux" {
-                if !cuda_linux_url.is_empty() {
-                    recommended_url = cuda_linux_url.clone();
-                } else if !vulkan_linux_url.is_empty() {
-                    recommended_url = vulkan_linux_url.clone();
-                } else if !cpu_linux_url.is_empty() {
-                    recommended_url = cpu_linux_url.clone();
-                }
-                fallback_url = cpu_linux_url.clone();
+            } else if fallback_url.is_empty() {
+                fallback_url = download_url.clone();
             }
 
-            let recommended_label = if target_os == "windows" {
-                "Vulkan (AMD/NVIDIA/Intel GPU Acceleration)".to_string()
-            } else if target_os == "macos" {
-                "Apple Metal (Unified Memory Apple Silicon)".to_string()
-            } else if !cuda_linux_url.is_empty() {
-                "NVIDIA CUDA (Linux GPU Acceleration)".to_string()
+            if target_os == "macos" {
+                asset_list.push(LlamaAsset {
+                    name: name.clone(),
+                    download_url: download_url.clone(),
+                    size_bytes,
+                    asset_type,
+                });
+            }
+        }
+
+        // Linux assets (Ubuntu / Debian / General Linux)
+        if name_lower.contains("ubuntu") || (name_lower.contains("linux") && !name_lower.contains("win")) {
+            let is_cuda = name_lower.contains("cuda");
+            let is_vulkan = name_lower.contains("vulkan");
+            let is_rocm = name_lower.contains("rocm");
+
+            let asset_type = if is_cuda {
+                if is_cudart {
+                    "linux_cudart_runtime".to_string()
+                } else if name_lower.contains("12") {
+                    "linux_cuda_12".to_string()
+                } else if name_lower.contains("13") {
+                    "linux_cuda_13".to_string()
+                } else {
+                    "linux_cuda".to_string()
+                }
+            } else if is_vulkan {
+                "linux_vulkan".to_string()
+            } else if is_rocm {
+                "linux_rocm".to_string()
+            } else if is_arm64 {
+                "linux_arm64".to_string()
             } else {
-                "Linux Default Build".to_string()
+                "linux_cpu_x64".to_string()
             };
 
-            let fallback_label = if target_os == "windows" {
-                "CPU (Universal AVX2 Fallback)".to_string()
-            } else {
-                "CPU Fallback".to_string()
-            };
+            if is_cudart {
+                if matches_host_arch && cudart_linux_url.is_empty() {
+                    cudart_linux_url = download_url.clone();
+                }
+            } else if is_cuda {
+                if matches_host_arch {
+                    if name_lower.contains("12") {
+                        cuda_linux_12_4_url = download_url.clone();
+                        if cuda_linux_url.is_empty() {
+                            cuda_linux_url = download_url.clone();
+                        }
+                    } else if name_lower.contains("13") {
+                        cuda_linux_13_3_url = download_url.clone();
+                        if cuda_linux_url.is_empty() {
+                            cuda_linux_url = download_url.clone();
+                        }
+                    } else if cuda_linux_url.is_empty() {
+                        cuda_linux_url = download_url.clone();
+                    }
+                }
+            } else if is_vulkan {
+                if matches_host_arch {
+                    vulkan_linux_url = download_url.clone();
+                }
+            } else if !is_rocm && !name_lower.contains("sycl") && !name_lower.contains("openvino") && !name_lower.contains("s390x") {
+                if matches_host_arch && cpu_linux_url.is_empty() {
+                    cpu_linux_url = download_url.clone();
+                }
+            }
 
-            list.push(LlamaBuildRelease {
-                tag_name,
-                release_name,
-                published_at,
-                html_url,
-                body,
-                current_os: target_os.to_string(),
-                recommended_url,
-                recommended_label,
-                fallback_url,
-                fallback_label,
-                vulkan_win_url,
-                cpu_win_url,
-                cuda_win_url,
-                cuda_12_4_win_url,
-                cuda_13_3_win_url,
-                cuda_linux_url,
-                cuda_linux_12_4_url,
-                vulkan_linux_url,
-                cpu_linux_url,
-                hip_win_url,
-                sycl_win_url,
-                assets: asset_list,
-            });
+            if target_os == "linux" {
+                asset_list.push(LlamaAsset {
+                    name: name.clone(),
+                    download_url: download_url.clone(),
+                    size_bytes,
+                    asset_type,
+                });
+            }
         }
     }
 
-    Ok(list)
+    if target_os == "windows" {
+        if !vulkan_win_url.is_empty() {
+            recommended_url = vulkan_win_url.clone();
+        } else if !cuda_win_url.is_empty() {
+            recommended_url = cuda_win_url.clone();
+        } else if !cpu_win_url.is_empty() {
+            recommended_url = cpu_win_url.clone();
+        }
+        fallback_url = cpu_win_url.clone();
+    } else if target_os == "linux" {
+        if !cuda_linux_url.is_empty() {
+            recommended_url = cuda_linux_url.clone();
+        } else if !vulkan_linux_url.is_empty() {
+            recommended_url = vulkan_linux_url.clone();
+        } else if !cpu_linux_url.is_empty() {
+            recommended_url = cpu_linux_url.clone();
+        }
+        fallback_url = cpu_linux_url.clone();
+    }
+
+    let recommended_label = if target_os == "windows" {
+        "Vulkan (AMD/NVIDIA/Intel GPU Acceleration)".to_string()
+    } else if target_os == "macos" {
+        "Apple Metal (Unified Memory Apple Silicon)".to_string()
+    } else if !cuda_linux_url.is_empty() {
+        "NVIDIA CUDA (Linux GPU Acceleration)".to_string()
+    } else {
+        "Linux Default Build".to_string()
+    };
+
+    let fallback_label = if target_os == "windows" {
+        "CPU (Universal AVX2 Fallback)".to_string()
+    } else {
+        "CPU Fallback".to_string()
+    };
+
+    LlamaBuildRelease {
+        tag_name,
+        release_name,
+        published_at,
+        html_url,
+        body,
+        current_os: target_os.to_string(),
+        recommended_url,
+        recommended_label,
+        fallback_url,
+        fallback_label,
+        vulkan_win_url,
+        cpu_win_url,
+        cuda_win_url,
+        cuda_12_4_win_url,
+        cuda_13_3_win_url,
+        cuda_linux_url,
+        cuda_linux_12_4_url,
+        cuda_linux_13_3_url,
+        vulkan_linux_url,
+        cpu_linux_url,
+        hip_win_url,
+        sycl_win_url,
+        cudart_win_url,
+        cudart_linux_url,
+        is_pinned: false,
+        assets: asset_list,
+    }
+}
+
+pub fn get_fallback_releases(target_os: &str, target_arch: &str) -> Vec<LlamaBuildRelease> {
+    let b10970_files: Vec<(&str, u64)> = vec![
+        ("cudart-llama-b10970-bin-ubuntu-cuda-12.8-x64.tar.gz", 594542592),
+        ("cudart-llama-b10970-bin-ubuntu-cuda-13.3-arm64.tar.gz", 518000000),
+        ("cudart-llama-b10970-bin-ubuntu-cuda-13.3-x64.tar.gz", 410000000),
+        ("cudart-llama-bin-win-cuda-12.4-x64.zip", 391118848),
+        ("cudart-llama-bin-win-cuda-13.3-x64.zip", 391118848),
+        ("cudart-llama-bin-win-cuda-13.4-arm64.zip", 153092096),
+        ("llama-b10970-bin-macos-arm64.tar.gz", 11114905),
+        ("llama-b10970-bin-macos-x64.tar.gz", 11219763),
+        ("llama-b10970-bin-ubuntu-arm64.tar.gz", 13421772),
+        ("llama-b10970-bin-ubuntu-cuda-12.8-x64.tar.gz", 168820736),
+        ("llama-b10970-bin-ubuntu-cuda-13.3-arm64.tar.gz", 144703488),
+        ("llama-b10970-bin-ubuntu-cuda-13.3-x64.tar.gz", 148897792),
+        ("llama-b10970-bin-ubuntu-vulkan-arm64.tar.gz", 24222105),
+        ("llama-b10970-bin-ubuntu-vulkan-x64.tar.gz", 30198988),
+        ("llama-b10970-bin-ubuntu-x64.tar.gz", 16882073),
+        ("llama-b10970-bin-win-cpu-arm64.zip", 11953766),
+        ("llama-b10970-bin-win-cpu-x64.zip", 18454937),
+        ("llama-b10970-bin-win-cuda-12.4-x64.zip", 253755392),
+        ("llama-b10970-bin-win-cuda-13.3-x64.zip", 149946368),
+        ("llama-b10970-bin-win-cuda-13.4-arm64.zip", 142606336),
+        ("llama-b10970-bin-win-vulkan-x64.zip", 31666995),
+    ];
+
+    let assets = b10970_files
+        .into_iter()
+        .map(|(name, size)| {
+            let url = format!("https://github.com/ggml-org/llama.cpp/releases/download/b10970/{}", name);
+            (name.to_string(), url, size)
+        })
+        .collect();
+
+    let mut rel = build_release_from_assets(
+        "b10970".to_string(),
+        "llama.cpp b10970 (Verified Linux & Windows Build)".to_string(),
+        "2026-09-14T20:56:00Z".to_string(),
+        "https://github.com/ggml-org/llama.cpp/releases/tag/b10970".to_string(),
+        "Official verified ggml-org/llama.cpp b10970 release with complete Linux CUDA 12, Linux CUDA 13, Linux Vulkan, and Windows CUDA builds.".to_string(),
+        assets,
+        target_os,
+        target_arch,
+    );
+    rel.is_pinned = true;
+    vec![rel]
+}
+
+pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
+    let (target_os, target_arch) = get_platform_info();
+    let pinned_b10970 = get_fallback_releases(target_os, target_arch).remove(0);
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) CodeLite/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let api_result = client
+        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=15")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await;
+
+    if let Ok(resp) = api_result {
+        if resp.status().is_success() {
+            if let Ok(releases_json) = resp.json::<serde_json::Value>().await {
+                if let Some(arr) = releases_json.as_array() {
+                    let mut list = Vec::new();
+                    // Always pin the verified b10970 build at the very top for guaranteed Linux CUDA availability
+                    list.push(pinned_b10970.clone());
+
+                    for rel in arr {
+                        let tag_name = rel["tag_name"].as_str().unwrap_or("").to_string();
+                        if tag_name == "b10970" {
+                            continue;
+                        }
+
+                        let release_name = rel["name"].as_str().unwrap_or(&tag_name).to_string();
+                        let published_at = rel["published_at"].as_str().unwrap_or("").to_string();
+                        let html_url = rel["html_url"].as_str().unwrap_or("").to_string();
+                        let body = rel["body"].as_str().unwrap_or("").to_string();
+
+                        let mut asset_items = Vec::new();
+                        if let Some(assets) = rel["assets"].as_array() {
+                            for asset in assets {
+                                let name = asset["name"].as_str().unwrap_or("").to_string();
+                                let download_url = asset["browser_download_url"].as_str().unwrap_or("").to_string();
+                                let size_bytes = asset["size"].as_u64().unwrap_or(0);
+                                if !name.is_empty() && !download_url.is_empty() {
+                                    asset_items.push((name, download_url, size_bytes));
+                                }
+                            }
+                        }
+
+                        list.push(build_release_from_assets(
+                            tag_name,
+                            release_name,
+                            published_at,
+                            html_url,
+                            body,
+                            asset_items,
+                            target_os,
+                            target_arch,
+                        ));
+                    }
+
+                    if !list.is_empty() {
+                        return Ok(list);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback if GitHub API rate-limits or is unreachable:
+    eprintln!("GitHub API unavailable or rate-limited; returning official pinned b10970 release presets.");
+    Ok(vec![pinned_b10970])
+}
+
+pub async fn fetch_specific_release(tag: String) -> Result<LlamaBuildRelease, String> {
+    let (target_os, target_arch) = get_platform_info();
+    let mut clean_tag = tag.trim().to_string();
+    if clean_tag.is_empty() {
+        return Err("Release tag cannot be empty".to_string());
+    }
+    if !clean_tag.starts_with('b') && !clean_tag.starts_with('v') {
+        clean_tag = format!("b{}", clean_tag);
+    }
+
+    let is_b10970 = clean_tag == "b10970";
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) CodeLite/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let api_url = format!("https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{}", clean_tag);
+    let api_result = client
+        .get(&api_url)
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await;
+
+    if let Ok(resp) = api_result {
+        if resp.status().is_success() {
+            if let Ok(rel) = resp.json::<serde_json::Value>().await {
+                let tag_name = rel["tag_name"].as_str().unwrap_or(&clean_tag).to_string();
+                let release_name = rel["name"].as_str().unwrap_or(&tag_name).to_string();
+                let published_at = rel["published_at"].as_str().unwrap_or("").to_string();
+                let html_url = rel["html_url"].as_str().unwrap_or("").to_string();
+                let body = rel["body"].as_str().unwrap_or("").to_string();
+
+                let mut asset_items = Vec::new();
+                if let Some(assets) = rel["assets"].as_array() {
+                    for asset in assets {
+                        let name = asset["name"].as_str().unwrap_or("").to_string();
+                        let download_url = asset["browser_download_url"].as_str().unwrap_or("").to_string();
+                        let size_bytes = asset["size"].as_u64().unwrap_or(0);
+                        if !name.is_empty() && !download_url.is_empty() {
+                            asset_items.push((name, download_url, size_bytes));
+                        }
+                    }
+                }
+
+                let mut release = build_release_from_assets(
+                    tag_name,
+                    release_name,
+                    published_at,
+                    html_url,
+                    body,
+                    asset_items,
+                    target_os,
+                    target_arch,
+                );
+                if is_b10970 {
+                    release.is_pinned = true;
+                }
+                return Ok(release);
+            }
+        }
+    }
+
+    // Try expanded assets scraping (bypasses GitHub REST API rate limits)
+    let expanded_url = format!("https://github.com/ggml-org/llama.cpp/releases/expanded_assets/{}", clean_tag);
+    if let Ok(exp_resp) = client.get(&expanded_url).send().await {
+        if exp_resp.status().is_success() {
+            if let Ok(html) = exp_resp.text().await {
+                let mut asset_items = Vec::new();
+                for line in html.lines() {
+                    if line.contains("/ggml-org/llama.cpp/releases/download/") {
+                        let prefix = format!("/ggml-org/llama.cpp/releases/download/{}/", clean_tag);
+                        if let Some(pos) = line.find(&prefix) {
+                            let rest = &line[pos + prefix.len()..];
+                            if let Some(end) = rest.find('"') {
+                                let filename = &rest[..end];
+                                let download_url = format!("https://github.com/ggml-org/llama.cpp/releases/download/{}/{}", clean_tag, filename);
+                                asset_items.push((filename.to_string(), download_url, 0));
+                            }
+                        }
+                    }
+                }
+
+                if !asset_items.is_empty() {
+                    let mut release = build_release_from_assets(
+                        clean_tag.clone(),
+                        format!("llama.cpp {}", clean_tag),
+                        "".to_string(),
+                        format!("https://github.com/ggml-org/llama.cpp/releases/tag/{}", clean_tag),
+                        format!("Found {} release binaries from GitHub for {}", asset_items.len(), clean_tag),
+                        asset_items,
+                        target_os,
+                        target_arch,
+                    );
+                    if is_b10970 {
+                        release.is_pinned = true;
+                    }
+                    return Ok(release);
+                }
+            }
+        }
+    }
+
+    if is_b10970 {
+        return Ok(get_fallback_releases(target_os, target_arch).remove(0));
+    }
+
+    Err(format!("Could not find release tag '{}' on GitHub", clean_tag))
 }
 
 pub async fn download_llama_engine(

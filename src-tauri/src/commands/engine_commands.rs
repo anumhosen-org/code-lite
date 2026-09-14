@@ -22,6 +22,11 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
 }
 
 #[tauri::command]
+pub async fn fetch_specific_release(tag: String) -> Result<LlamaBuildRelease, String> {
+    engine_service::fetch_specific_release(tag).await
+}
+
+#[tauri::command]
 pub fn check_binary_installed() -> Option<String> {
     engine_service::check_binary_installed()
 }

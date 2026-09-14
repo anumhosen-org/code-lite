@@ -8,6 +8,8 @@ import {
   VscDebugStop,
   VscPulse,
   VscFlame,
+  VscSearch,
+  VscPinned,
 } from "react-icons/vsc";
 import { useLocalAiStore } from "../../store/localAiStore";
 
@@ -21,6 +23,7 @@ export const EngineDashboard: React.FC = () => {
     isDownloadingEngine,
     isLoadingReleases,
     fetchReleases,
+    fetchSpecificRelease,
     downloadEngine,
     stopModelSidecar,
     setExpandedDashboard,
@@ -30,6 +33,9 @@ export const EngineDashboard: React.FC = () => {
   const [port, setPort] = useState(11434);
   const [contextSize, setContextSize] = useState(8192);
   const [gpuLayers, setGpuLayers] = useState(99);
+  const [releaseSearchQuery, setReleaseSearchQuery] = useState("");
+  const [isSearchingSpecific, setIsSearchingSpecific] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6 select-none animate-in fade-in duration-150">
@@ -215,20 +221,77 @@ export const EngineDashboard: React.FC = () => {
           {/* TAB 2: RELEASES & BINARIES */}
           {activeTab === "releases" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold text-white">llama.cpp Engine Builds</h3>
                   <p className="text-xs text-gray-400">
                     Pre-compiled server binaries directly from official ggml-org/llama.cpp releases
                   </p>
                 </div>
-                <button
-                  onClick={() => fetchReleases()}
-                  disabled={isLoadingReleases}
-                  className="px-3 py-1.5 rounded bg-vsc-sidebar border border-vsc-border hover:bg-white/10 text-xs text-white transition-colors disabled:opacity-50"
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => fetchReleases()}
+                    disabled={isLoadingReleases}
+                    className="px-3 py-1.5 rounded bg-vsc-sidebar border border-vsc-border hover:bg-white/10 text-xs text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <VscCloudDownload />
+                    <span>{isLoadingReleases ? "Checking GitHub..." : "Check Releases"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Release Search & Tag Fetcher */}
+              <div className="flex flex-col gap-2">
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const tag = releaseSearchQuery.trim();
+                    if (!tag) return;
+                    setIsSearchingSpecific(true);
+                    setSearchError(null);
+                    try {
+                      await fetchSpecificRelease(tag);
+                      setSearchError(null);
+                    } catch (err) {
+                      setSearchError(String(err));
+                    } finally {
+                      setIsSearchingSpecific(false);
+                    }
+                  }}
+                  className="relative flex items-center"
                 >
-                  {isLoadingReleases ? "Checking GitHub..." : "Check Releases"}
-                </button>
+                  <VscSearch className="absolute left-3 text-gray-400 pointer-events-none text-sm" />
+                  <input
+                    type="text"
+                    value={releaseSearchQuery}
+                    onChange={(e) => {
+                      setReleaseSearchQuery(e.target.value);
+                      setSearchError(null);
+                    }}
+                    placeholder="Search releases or enter exact release tag (e.g. b10970, b10969)..."
+                    className="w-full bg-vsc-sidebar border border-vsc-border rounded pl-9 pr-24 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                  {releaseSearchQuery.trim() && (
+                    <button
+                      type="submit"
+                      disabled={isSearchingSpecific}
+                      className="absolute right-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <VscSearch />
+                      <span>{isSearchingSpecific ? "Fetching..." : "Fetch Tag"}</span>
+                    </button>
+                  )}
+                </form>
+
+                {searchError && (
+                  <div className="p-2 rounded bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center justify-between">
+                    <span>{searchError}</span>
+                    <button onClick={() => setSearchError(null)} className="hover:text-white">
+                      <VscClose />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Active Installed Info */}
@@ -254,44 +317,103 @@ export const EngineDashboard: React.FC = () => {
 
               {/* Releases Table / Cards */}
               <div className="space-y-3">
-                {releases.map((rel) => (
-                  <div
-                    key={rel.tag_name}
-                    className="p-4 rounded-lg border border-vsc-border bg-vsc-sidebar/40 space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-white font-mono">
-                          {rel.release_name || rel.tag_name}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {rel.published_at.slice(0, 10)}
-                        </span>
-                      </div>
+                {releases.length === 0 && !isLoadingReleases && (
+                  <div className="p-8 text-center border border-dashed border-vsc-border rounded-lg space-y-3">
+                    <p className="text-xs text-gray-400">
+                      No release builds currently loaded. Check GitHub releases or refresh to load presets.
+                    </p>
+                    <button
+                      onClick={() => fetchReleases()}
+                      className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-xs text-white transition-colors"
+                    >
+                      Fetch llama.cpp Builds
+                    </button>
+                  </div>
+                )}
+
+                {releases
+                  .filter((rel) => {
+                    const q = releaseSearchQuery.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      rel.tag_name.toLowerCase().includes(q) ||
+                      (rel.release_name && rel.release_name.toLowerCase().includes(q))
+                    );
+                  })
+                  .map((rel) => {
+                    const isPinned = !!rel.is_pinned || rel.tag_name === "b10970";
+                    return (
+                      <div
+                        key={rel.tag_name}
+                        className={`p-4 rounded-lg border space-y-3 transition-colors ${
+                          isPinned
+                            ? "border-amber-500/50 bg-amber-950/15"
+                            : "border-vsc-border bg-vsc-sidebar/40"
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-sm text-white font-mono">
+                              {rel.release_name || rel.tag_name}
+                            </span>
+                            {isPinned && (
+                              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-medium flex items-center gap-1">
+                                <VscPinned className="text-amber-400 text-xs" />
+                                <span>Pinned: Verified Linux & Windows CUDA</span>
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-500">
+                              {rel.published_at ? rel.published_at.slice(0, 10) : "Official Build"}
+                            </span>
+                          </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {/* Linux CUDA Option */}
-                        {rel.cuda_linux_url && (
+                        {/* Windows CUDA 12.4 */}
+                        {(rel.cuda_12_4_win_url || rel.cuda_win_url) && (
                           <button
-                            onClick={() => downloadEngine(rel.cuda_linux_url)}
-                            disabled={isDownloadingEngine}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
-                            title="Linux NVIDIA CUDA acceleration"
-                          >
-                            <VscCloudDownload />
-                            <span>Linux CUDA Build</span>
-                          </button>
-                        )}
-                        {/* Windows CUDA Option */}
-                        {rel.cuda_win_url && (
-                          <button
-                            onClick={() => downloadEngine(rel.cuda_win_url)}
+                            onClick={() => downloadEngine(rel.cuda_12_4_win_url || rel.cuda_win_url)}
                             disabled={isDownloadingEngine}
                             className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
-                            title="Windows NVIDIA CUDA acceleration"
+                            title="Windows NVIDIA CUDA 12.4 acceleration (Driver 525+)"
                           >
                             <VscCloudDownload />
-                            <span>Windows CUDA</span>
+                            <span>Win CUDA 12</span>
+                          </button>
+                        )}
+                        {/* Windows CUDA 13.3 */}
+                        {rel.cuda_13_3_win_url && (
+                          <button
+                            onClick={() => downloadEngine(rel.cuda_13_3_win_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Windows NVIDIA CUDA 13.3 acceleration (Driver 560+)"
+                          >
+                            <VscCloudDownload />
+                            <span>Win CUDA 13</span>
+                          </button>
+                        )}
+                        {/* Linux CUDA 12.8 */}
+                        {(rel.cuda_linux_12_4_url || rel.cuda_linux_url) && (
+                          <button
+                            onClick={() => downloadEngine(rel.cuda_linux_12_4_url || rel.cuda_linux_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Linux NVIDIA CUDA 12.8 acceleration (Ubuntu/Debian)"
+                          >
+                            <VscCloudDownload />
+                            <span>Linux CUDA 12</span>
+                          </button>
+                        )}
+                        {/* Linux CUDA 13.3 */}
+                        {rel.cuda_linux_13_3_url && (
+                          <button
+                            onClick={() => downloadEngine(rel.cuda_linux_13_3_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-green-800 hover:bg-green-700 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Linux NVIDIA CUDA 13.3 acceleration (Ubuntu/Debian)"
+                          >
+                            <VscCloudDownload />
+                            <span>Linux CUDA 13</span>
                           </button>
                         )}
                         {/* Vulkan Option */}
@@ -300,10 +422,22 @@ export const EngineDashboard: React.FC = () => {
                             onClick={() => downloadEngine(rel.vulkan_win_url || rel.vulkan_linux_url)}
                             disabled={isDownloadingEngine}
                             className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
-                            title="Universal Vulkan GPU acceleration"
+                            title="Universal Vulkan GPU acceleration (AMD / NVIDIA / Intel)"
                           >
                             <VscCloudDownload />
-                            <span>Install Vulkan</span>
+                            <span>Vulkan GPU</span>
+                          </button>
+                        )}
+                        {/* macOS Metal */}
+                        {rel.current_os === "macos" && rel.recommended_url && (
+                          <button
+                            onClick={() => downloadEngine(rel.recommended_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="macOS Apple Metal acceleration"
+                          >
+                            <VscCloudDownload />
+                            <span>Apple Metal</span>
                           </button>
                         )}
                         {/* CPU Option */}
@@ -312,7 +446,7 @@ export const EngineDashboard: React.FC = () => {
                             onClick={() => downloadEngine(rel.cpu_win_url || rel.cpu_linux_url || rel.fallback_url)}
                             disabled={isDownloadingEngine}
                             className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors disabled:opacity-50"
-                            title="CPU fallback build"
+                            title="CPU fallback build (AVX2 universal)"
                           >
                             <VscCloudDownload />
                             <span>CPU AVX2</span>
@@ -321,7 +455,8 @@ export const EngineDashboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             </div>
           )}

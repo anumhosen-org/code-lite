@@ -30,6 +30,7 @@ interface LocalAiState {
   // Actions
   fetchHardwareAndEngine: () => Promise<void>;
   fetchReleases: () => Promise<void>;
+  fetchSpecificRelease: (tag: string) => Promise<LlamaBuildRelease>;
   downloadEngine: (url: string) => Promise<void>;
   refreshInstalledModels: () => Promise<void>;
   downloadModel: (downloadUrl: string, filename: string) => Promise<void>;
@@ -97,6 +98,20 @@ export const useLocalAiStore = create<LocalAiState>((set, get) => ({
     } catch (err) {
       console.error("Failed fetching llama releases:", err);
       set({ isLoadingReleases: false });
+    }
+  },
+
+  fetchSpecificRelease: async (tag: string) => {
+    set({ isLoadingReleases: true });
+    try {
+      const rel = await invoke<LlamaBuildRelease>("fetch_specific_release", { tag });
+      const existing = get().releases.filter((r) => r.tag_name !== rel.tag_name);
+      set({ releases: [rel, ...existing], isLoadingReleases: false });
+      return rel;
+    } catch (err) {
+      console.error("Failed fetching specific release:", err);
+      set({ isLoadingReleases: false });
+      throw err;
     }
   },
 

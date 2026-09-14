@@ -60,6 +60,7 @@ pub fn run() {
             get_hardware_info,
             get_hardware_recommendation,
             fetch_llama_releases,
+            fetch_specific_release,
             check_binary_installed,
             get_installed_engine_info,
             download_llama_engine,

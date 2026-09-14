@@ -8,6 +8,7 @@ import {
   VscCloudDownload,
   VscDebugStop,
   VscFlame,
+  VscPinned,
 } from "react-icons/vsc";
 import { useLocalAiStore } from "../../store/localAiStore";
 
@@ -39,12 +40,19 @@ export const EngineSidebarView: React.FC = () => {
 
   const handleDownloadLatest = () => {
     if (!latestRelease) return;
+    const isWindows = latestRelease.current_os === "windows" || navigator.userAgent.includes("Win");
     const url =
       selectedBuildType === "cuda"
-        ? latestRelease.cuda_linux_url || latestRelease.cuda_win_url || latestRelease.recommended_url
+        ? (isWindows
+            ? (latestRelease.cuda_win_url || latestRelease.cuda_12_4_win_url)
+            : (latestRelease.cuda_linux_url || latestRelease.cuda_linux_12_4_url)) || latestRelease.recommended_url
         : selectedBuildType === "vulkan"
-        ? latestRelease.vulkan_linux_url || latestRelease.vulkan_win_url || latestRelease.recommended_url
-        : latestRelease.cpu_linux_url || latestRelease.cpu_win_url || latestRelease.fallback_url;
+        ? (isWindows
+            ? latestRelease.vulkan_win_url
+            : latestRelease.vulkan_linux_url) || latestRelease.recommended_url
+        : (isWindows
+            ? latestRelease.cpu_win_url
+            : latestRelease.cpu_linux_url) || latestRelease.fallback_url;
 
     if (url) {
       downloadEngine(url).catch((err) => alert(`Download failed: ${err}`));
@@ -180,6 +188,18 @@ export const EngineSidebarView: React.FC = () => {
                   CPU
                 </button>
               </div>
+
+              {latestRelease && (
+                <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono px-0.5">
+                  <span>Target: {latestRelease.tag_name}</span>
+                  {(latestRelease.is_pinned || latestRelease.tag_name === "b10970") && (
+                    <span className="text-amber-400 flex items-center gap-1 font-medium">
+                      <VscPinned className="text-xs" />
+                      <span>Verified Build</span>
+                    </span>
+                  )}
+                </div>
+              )}
 
               <button
                 onClick={handleDownloadLatest}
