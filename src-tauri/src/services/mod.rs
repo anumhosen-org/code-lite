@@ -10,5 +10,4 @@ pub mod knowledge_service;
 pub mod embedding_service;
 pub mod mcp_service;
 pub mod ai_proxy_service;
-
-
+pub mod session_history_service;

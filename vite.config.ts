@@ -5,7 +5,7 @@ import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(() => ({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
@@ -27,6 +27,41 @@ export default defineConfig(() => ({
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
+    },
+  },
+
+  build: {
+    // Target modern Chromium / WebView2 engine (native on Windows 10/11)
+    target: "es2022",
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes("node_modules")) {
+            if (id.includes("@monaco-editor") || id.includes("monaco-editor")) {
+              return "vendor-monaco";
+            }
+            if (id.includes("@xterm")) {
+              return "vendor-xterm";
+            }
+            if (id.includes("react-icons")) {
+              return "vendor-icons";
+            }
+            if (id.includes("@tauri-apps")) {
+              return "vendor-tauri";
+            }
+            if (
+              id.includes("react") ||
+              id.includes("react-dom") ||
+              id.includes("zustand")
+            ) {
+              return "vendor-core";
+            }
+            return "vendor-misc";
+          }
+        },
+      },
     },
   },
 }));

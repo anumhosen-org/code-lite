@@ -94,4 +94,5 @@ export interface CuratedModel {
   filename: string;
   recommended_vram: string;
   recommendedForCoding?: boolean;
+  vram_tier?: "8GB" | "12GB" | "16GB" | "Compact";
 }

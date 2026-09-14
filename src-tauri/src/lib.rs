@@ -7,6 +7,7 @@ use commands::terminal_commands::*;
 use commands::window_commands::*;
 use commands::engine_commands::*;
 use commands::knowledge_commands::*;
+use commands::session_commands::*;
 use services::pty_service::PtyServiceState;
 use services::sidecar_service::{SidecarState, stop_sidecar_internal};
 use tauri::Manager;
@@ -19,8 +20,9 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize offline SQLite knowledge database
+    // Initialize offline SQLite databases
     let _ = services::knowledge_service::init_knowledge_db();
+    let _ = services::session_history_service::init_session_history_db();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -75,6 +77,12 @@ pub fn run() {
             semantic_search_code,
             list_mcp_tools,
             enrich_prompt_context,
+            // Workspace Session History commands
+            list_workspace_sessions,
+            get_session_messages,
+            save_workspace_session,
+            delete_workspace_session,
+            rename_workspace_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

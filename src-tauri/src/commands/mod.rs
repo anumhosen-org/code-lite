@@ -4,4 +4,4 @@ pub mod terminal_commands;
 pub mod window_commands;
 pub mod engine_commands;
 pub mod knowledge_commands;
-
+pub mod session_commands;

@@ -9,7 +9,6 @@ import { useWorkspaceStore } from "./store/workspaceStore";
 import { useEditorStore } from "./store/editorStore";
 import { useTerminalStore } from "./store/terminalStore";
 import { useAgentStore } from "./store/agentStore";
-import { useSettingsStore } from "./store/settingsStore";
 import { useLayoutStore } from "./store/layoutStore";
 import { TitleBar } from "./components/layout/TitleBar";
 import { ActivityBar } from "./components/layout/ActivityBar";
@@ -18,22 +17,33 @@ import { SearchSidebar } from "./components/search/SearchSidebar";
 import { ModelsSidebarView } from "./components/models/ModelsSidebarView";
 import { EngineSidebarView } from "./components/engine/EngineSidebarView";
 import { KnowledgeSidebarView } from "./components/knowledge/KnowledgeSidebarView";
-import { KnowledgeDashboard } from "./components/knowledge/KnowledgeDashboard";
-import { ModelsDashboard } from "./components/models/ModelsDashboard";
-import { EngineDashboard } from "./components/engine/EngineDashboard";
 import { EditorContainer } from "./components/editor/EditorContainer";
-import { TerminalContainer } from "./components/terminal/TerminalContainer";
 import { AgentPanel } from "./components/agent/AgentPanel";
-import { SettingsModal } from "./components/settings/SettingsModal";
 import { useLocalAiStore } from "./store/localAiStore";
+
+// VS Code-style Deferred Subsystems (Lazy Chunks)
+const KnowledgeDashboard = React.lazy(() =>
+  import("./components/knowledge/KnowledgeDashboard").then((m) => ({ default: m.KnowledgeDashboard }))
+);
+const ModelsDashboard = React.lazy(() =>
+  import("./components/models/ModelsDashboard").then((m) => ({ default: m.ModelsDashboard }))
+);
+const EngineDashboard = React.lazy(() =>
+  import("./components/engine/EngineDashboard").then((m) => ({ default: m.EngineDashboard }))
+);
+const SettingsModal = React.lazy(() =>
+  import("./components/settings/SettingsModal").then((m) => ({ default: m.SettingsModal }))
+);
+const TerminalContainer = React.lazy(() =>
+  import("./components/terminal/TerminalContainer").then((m) => ({ default: m.TerminalContainer }))
+);
 
 
 export const App: React.FC = () => {
-  const { setWorkspacePath } = useWorkspaceStore();
+  const { setWorkspacePath, workspacePath } = useWorkspaceStore();
   const { tabs, activeTabId } = useEditorStore();
   const { toggleTerminal } = useTerminalStore();
-  const { togglePanel, isPanelOpen } = useAgentStore();
-  const { activeProvider, providers } = useSettingsStore();
+  const { togglePanel, isPanelOpen, loadWorkspaceSessions } = useAgentStore();
   const {
     sidebarWidth,
     setSidebarWidth,
@@ -47,7 +57,6 @@ export const App: React.FC = () => {
   const startSidebarWidthRef = React.useRef(sidebarWidth);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const activeModel = providers[activeProvider]?.model || "unknown";
 
   const {
     expandedDashboard,
@@ -93,6 +102,13 @@ export const App: React.FC = () => {
       if (cleanup) cleanup();
     };
   }, [fetchHardwareAndEngine, refreshInstalledModels, initListeners]);
+
+  // Sync workspace session history on workspace folder changes
+  useEffect(() => {
+    if (workspacePath) {
+      loadWorkspaceSessions(workspacePath);
+    }
+  }, [workspacePath, loadWorkspaceSessions]);
 
   // Global keybindings
   useEffect(() => {
@@ -181,35 +197,37 @@ export const App: React.FC = () => {
         {/* Central Editor & Bottom Terminal */}
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
           <EditorContainer />
-          <TerminalContainer />
+          <React.Suspense fallback={null}>
+            <TerminalContainer />
+          </React.Suspense>
         </main>
 
         {/* Right Collapsible Agent Panel */}
         {isPanelOpen && <AgentPanel />}
       </div>
 
-      {/* VS Code Bottom Status Bar */}
-      <footer className="h-6 bg-vsc-status text-white flex items-center justify-between px-2 text-[11px] font-medium z-40 select-none flex-shrink-0">
+      {/* VS Code Bottom Status Bar (Compact Antigravity Design) */}
+      <footer className="h-[22px] bg-vsc-status border-t border-vsc-border text-gray-400 flex items-center justify-between px-2 text-[11px] leading-none z-40 select-none flex-shrink-0">
         {/* Left Status Area */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer">
-            <VscSourceControl />
+        <div className="flex items-center gap-1.5 h-full">
+          <div className="h-full flex items-center gap-1 hover:bg-white/10 px-1.5 rounded cursor-pointer text-gray-300 hover:text-white transition-colors">
+            <VscSourceControl className="text-xs" />
             <span>main*</span>
           </div>
-          <div className="flex items-center gap-1 hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer">
-            <VscCheck />
+          <div className="h-full flex items-center gap-1 hover:bg-white/10 px-1.5 rounded cursor-pointer text-gray-300 hover:text-white transition-colors">
+            <VscCheck className="text-xs" />
             <span>Ready</span>
           </div>
         </div>
 
         {/* Right Status Area */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 h-full">
           {activeTab && (
             <>
-              <span className="hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer">
+              <span className="h-full flex items-center hover:bg-white/10 px-1.5 rounded cursor-pointer text-gray-400 hover:text-white transition-colors">
                 UTF-8
               </span>
-              <span className="hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer capitalize">
+              <span className="h-full flex items-center hover:bg-white/10 px-1.5 rounded cursor-pointer capitalize text-gray-400 hover:text-white transition-colors">
                 {activeTab.language}
               </span>
             </>
@@ -218,14 +236,14 @@ export const App: React.FC = () => {
           {/* Local Engine Status Indicator */}
           <div
             onClick={() => setActiveSidebarView(activeSidebarView === "models" ? null : "models")}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors ${
+            className={`h-full flex items-center gap-1.5 px-2 rounded cursor-pointer transition-colors ${
               sidecarStatus?.is_running
-                ? "bg-green-900/60 hover:bg-green-800 text-green-300"
+                ? "bg-green-950/60 hover:bg-green-900 text-green-300 border border-green-800/40"
                 : "bg-white/5 hover:bg-white/10 text-gray-400"
             }`}
             title={
               sidecarStatus?.is_running
-                ? `Local Engine Active: ${sidecarStatus.current_model || "llama-server"} on port ${sidecarStatus.port}`
+                ? `Local Engine Active on port ${sidecarStatus.port}`
                 : "Local Engine Offline - Click to configure models"
             }
           >
@@ -235,35 +253,37 @@ export const App: React.FC = () => {
               }`}
             />
             <span className="font-mono text-[10px]">
-              {sidecarStatus?.is_running
-                ? `Local: ${sidecarStatus.current_model?.split(/[/\\]/).pop()?.slice(0, 14) || "Active"}`
-                : "Offline Engine"}
+              {sidecarStatus?.is_running ? "Engine: Active" : "Engine: Offline"}
             </span>
           </div>
 
-          {/* Agent Model Status Pill */}
+          {/* Agent Status Indicator */}
           <div
             onClick={togglePanel}
-            className="flex items-center gap-1 hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer bg-blue-800/60"
-            title="Click to toggle Agent panel"
+            className={`h-full flex items-center gap-1 px-2 rounded cursor-pointer transition-colors ${
+              isPanelOpen
+                ? "bg-white/10 text-white"
+                : "hover:bg-white/10 text-gray-400 hover:text-white"
+            }`}
+            title="Toggle Agent panel (Ctrl+L)"
           >
-            <VscSparkle className="text-yellow-300" />
-            <span className="font-mono text-[10px] truncate max-w-[120px]">{activeModel}</span>
+            <VscSparkle className="text-yellow-400 text-xs" />
+            <span className="font-medium text-[10px]">Agent</span>
           </div>
 
-          <div className="hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer">
-            <VscFeedback />
+          <div className="h-full flex items-center hover:bg-white/10 px-1.5 rounded cursor-pointer text-gray-400 hover:text-white transition-colors">
+            <VscFeedback className="text-xs" />
           </div>
         </div>
       </footer>
 
-      {/* Settings Modal */}
-      <SettingsModal />
-
-      {/* Full Screen Dashboards */}
-      {expandedDashboard === "models" && <ModelsDashboard />}
-      {expandedDashboard === "engine" && <EngineDashboard />}
-      {expandedDashboard === "knowledge" && <KnowledgeDashboard />}
+      {/* Settings Modal & Full Screen Dashboards */}
+      <React.Suspense fallback={null}>
+        <SettingsModal />
+        {expandedDashboard === "models" && <ModelsDashboard />}
+        {expandedDashboard === "engine" && <EngineDashboard />}
+        {expandedDashboard === "knowledge" && <KnowledgeDashboard />}
+      </React.Suspense>
     </div>
   );
 };

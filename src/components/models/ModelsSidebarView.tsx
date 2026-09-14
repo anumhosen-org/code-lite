@@ -32,7 +32,7 @@ export const ModelsSidebarView: React.FC = () => {
     refreshInstalledModels();
   }, [refreshInstalledModels]);
 
-  const topCodingModels = CURATED_MODELS.filter((m) => m.recommendedForCoding).slice(0, 4);
+  const topCodingModels = CURATED_MODELS.filter((m) => m.recommendedForCoding).slice(0, 6);
 
   const isModelInstalled = (filename: string) => {
     return installedModels.some(
@@ -222,9 +222,16 @@ export const ModelsSidebarView: React.FC = () => {
                   key={model.tag}
                   className="p-2 rounded border border-vsc-border bg-vsc-bg/40 space-y-1"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-200">{model.name}</span>
-                    <span className="text-[10px] text-gray-400 font-mono">
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-gray-200 truncate">{model.name}</span>
+                      {model.vram_tier && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 text-blue-300 font-mono flex-shrink-0">
+                          {model.vram_tier}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-mono flex-shrink-0">
                       {model.file_size_gb} GB
                     </span>
                   </div>

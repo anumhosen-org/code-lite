@@ -34,19 +34,32 @@ export const ModelsDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"catalog" | "installed" | "custom" | "settings">("catalog");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFamily, setSelectedFamily] = useState("All");
+  const [selectedVramTier, setSelectedVramTier] = useState("All");
   const [customUrl, setCustomUrl] = useState("");
   const [customFilename, setCustomFilename] = useState("");
 
-  const families = ["All", "Qwen", "DeepSeek", "Llama", "Mistral"];
+  const families = ["All", "Qwen", "DeepSeek", "Mistral", "Llama", "Gemma", "BigCode"];
+  const vramTiers: { id: string; label: string; sub?: string }[] = [
+    { id: "All", label: "All GPUs" },
+    { id: "8GB", label: "8GB GPU", sub: "RTX 3070 / 4060" },
+    { id: "12GB", label: "12GB GPU", sub: "RTX 3060 12G / 4070" },
+    { id: "16GB", label: "16GB GPU", sub: "RTX 4080 / 4060 Ti 16G" },
+    { id: "Compact", label: "Compact / CPU", sub: "1B - 3B Edge" },
+  ];
 
   const filteredCatalog = CURATED_MODELS.filter((m) => {
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.family.toLowerCase().includes(searchQuery.toLowerCase());
+      m.name.toLowerCase().includes(query) ||
+      m.description.toLowerCase().includes(query) ||
+      m.family.toLowerCase().includes(query) ||
+      (m.vram_tier && m.vram_tier.toLowerCase().includes(query)) ||
+      m.parameter_size.toLowerCase().includes(query);
     const matchesFamily =
       selectedFamily === "All" || m.family.toLowerCase() === selectedFamily.toLowerCase();
-    return matchesSearch && matchesFamily;
+    const matchesVram =
+      selectedVramTier === "All" || m.vram_tier === selectedVramTier;
+    return matchesSearch && matchesFamily && matchesVram;
   });
 
   const isModelInstalled = (filename: string) => {
@@ -175,33 +188,69 @@ export const ModelsDashboard: React.FC = () => {
           {/* TAB 1: CURATED CATALOG */}
           {activeTab === "catalog" && (
             <div className="space-y-5">
-              {/* Search & Filter Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="relative w-72">
-                  <VscSearch className="absolute left-3 top-2.5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search models..."
-                    className="w-full bg-vsc-sidebar border border-vsc-border rounded pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                  />
+              {/* Search & Hardware / VRAM Filters */}
+              <div className="space-y-3 bg-vsc-sidebar/40 p-3.5 rounded-lg border border-vsc-border">
+                {/* Search & VRAM Filter Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="relative w-72">
+                    <VscSearch className="absolute left-3 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search models, sizes, weights..."
+                      className="w-full bg-vsc-sidebar border border-vsc-border rounded pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* VRAM Tier Selector Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400 font-medium mr-1">NVIDIA / VRAM:</span>
+                    {vramTiers.map((tier) => (
+                      <button
+                        key={tier.id}
+                        onClick={() => setSelectedVramTier(tier.id)}
+                        title={tier.sub ? `Target: ${tier.sub}` : undefined}
+                        className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1.5 ${
+                          selectedVramTier === tier.id
+                            ? tier.id === "16GB"
+                              ? "bg-purple-600 text-white font-medium shadow-sm"
+                              : tier.id === "12GB"
+                              ? "bg-indigo-600 text-white font-medium shadow-sm"
+                              : tier.id === "8GB"
+                              ? "bg-emerald-600 text-white font-medium shadow-sm"
+                              : "bg-blue-600 text-white font-medium shadow-sm"
+                            : "bg-vsc-sidebar text-gray-400 hover:text-white border border-vsc-border"
+                        }`}
+                      >
+                        <span>{tier.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {families.map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setSelectedFamily(f)}
-                      className={`px-2.5 py-1 rounded text-xs transition-colors ${
-                        selectedFamily === f
-                          ? "bg-blue-600 text-white font-medium"
-                          : "bg-vsc-sidebar text-gray-400 hover:text-white border border-vsc-border"
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
+                {/* Model Family Architecture Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-vsc-border/60 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400 font-medium mr-1">Architecture:</span>
+                    {families.map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setSelectedFamily(f)}
+                        className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
+                          selectedFamily === f
+                            ? "bg-gray-700 text-white font-medium"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-[11px] text-gray-400 font-mono">
+                    Showing {filteredCatalog.length} of {CURATED_MODELS.length} models
+                  </div>
                 </div>
               </div>
 
@@ -218,10 +267,25 @@ export const ModelsDashboard: React.FC = () => {
                       <div>
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="text-sm font-semibold text-white">{model.name}</h3>
+                              {model.vram_tier && (
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${
+                                    model.vram_tier === "16GB"
+                                      ? "bg-purple-950/80 text-purple-300 border border-purple-800/60"
+                                      : model.vram_tier === "12GB"
+                                      ? "bg-indigo-950/80 text-indigo-300 border border-indigo-800/60"
+                                      : model.vram_tier === "8GB"
+                                      ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800/60"
+                                      : "bg-gray-800 text-gray-300 border border-gray-700"
+                                  }`}
+                                >
+                                  {model.vram_tier === "Compact" ? "CPU/Edge" : `${model.vram_tier} GPU`}
+                                </span>
+                              )}
                               {model.recommendedForCoding && (
-                                <span className="px-1.5 py-0.5 bg-blue-900/60 text-blue-300 rounded text-[10px] font-medium">
+                                <span className="px-1.5 py-0.5 bg-blue-900/60 text-blue-300 rounded text-[10px] font-medium border border-blue-800/40">
                                   Coding Star
                                 </span>
                               )}
@@ -229,7 +293,7 @@ export const ModelsDashboard: React.FC = () => {
                             <span className="text-[11px] text-gray-500 font-mono">{model.tag}</span>
                           </div>
 
-                          <span className="text-xs font-mono font-medium text-gray-300">
+                          <span className="text-xs font-mono font-medium text-gray-300 flex-shrink-0">
                             {model.file_size_gb} GB
                           </span>
                         </div>
@@ -243,6 +307,7 @@ export const ModelsDashboard: React.FC = () => {
                         <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono">
                           <span className="px-1.5 py-0.5 bg-gray-800 rounded">{model.quantization}</span>
                           <span className="px-1.5 py-0.5 bg-gray-800 rounded">VRAM: {model.recommended_vram}</span>
+                          <span className="px-1.5 py-0.5 bg-gray-800 rounded">{model.parameter_size}</span>
                         </div>
 
                         {installed ? (
