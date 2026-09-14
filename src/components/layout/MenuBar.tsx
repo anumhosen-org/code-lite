@@ -5,6 +5,8 @@ import { useTerminalStore } from "../../store/terminalStore";
 import { useAgentStore } from "../../store/agentStore";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useWorkspaceStore } from "../../store/workspaceStore";
+import { useLayoutStore } from "../../store/layoutStore";
+import { useLocalAiStore } from "../../store/localAiStore";
 
 interface MenuItem {
   label: string;
@@ -26,6 +28,8 @@ export const MenuBar: React.FC = () => {
   const { saveActiveFile, closeActiveTab } = useEditorStore();
   const { toggleTerminal, addTerminal, profiles } = useTerminalStore();
   const { togglePanel, clearChat } = useAgentStore();
+  const { setActiveSidebarView } = useLayoutStore();
+  const { setExpandedDashboard } = useLocalAiStore();
   const {
     setModalOpen,
     editorSettings,
@@ -202,6 +206,25 @@ export const MenuBar: React.FC = () => {
         },
         { separator: true, label: "" },
         {
+          label: "Local Models View",
+          shortcut: "Ctrl+Shift+M",
+          action: () => setActiveSidebarView("models"),
+        },
+        {
+          label: "llama.cpp Engine View",
+          shortcut: "Ctrl+Shift+U",
+          action: () => setActiveSidebarView("engine"),
+        },
+        {
+          label: "Open Models Dashboard",
+          action: () => setExpandedDashboard("models"),
+        },
+        {
+          label: "Open Engine Dashboard",
+          action: () => setExpandedDashboard("engine"),
+        },
+        { separator: true, label: "" },
+        {
           label: "Settings & Preferences",
           action: () => setModalOpen(true),
         },
@@ -244,6 +267,15 @@ export const MenuBar: React.FC = () => {
         {
           label: "Clear Conversation",
           action: () => clearChat(),
+        },
+        { separator: true, label: "" },
+        {
+          label: "Manage Local Models...",
+          action: () => setExpandedDashboard("models"),
+        },
+        {
+          label: "Manage llama.cpp Engine...",
+          action: () => setExpandedDashboard("engine"),
         },
         { separator: true, label: "" },
         {

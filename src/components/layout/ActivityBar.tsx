@@ -5,11 +5,14 @@ import {
   VscTerminal,
   VscSparkle,
   VscSettingsGear,
+  VscPackage,
+  VscServerProcess,
 } from "react-icons/vsc";
 import { ActiveSidebarView } from "../../types";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useAgentStore } from "../../store/agentStore";
 import { useSettingsStore } from "../../store/settingsStore";
+import { useLocalAiStore } from "../../store/localAiStore";
 
 interface ActivityBarProps {
   activeView: ActiveSidebarView;
@@ -23,6 +26,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   const { toggleTerminal } = useTerminalStore();
   const { togglePanel, isPanelOpen } = useAgentStore();
   const { setModalOpen } = useSettingsStore();
+  const { sidecarStatus } = useLocalAiStore();
+
 
   const handleViewClick = (view: ActiveSidebarView) => {
     if (activeView === view) {
@@ -70,6 +75,41 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500" />
           )}
           <VscSearch className="text-2xl" />
+        </button>
+
+        {/* Local Models */}
+        <button
+          onClick={() => handleViewClick("models")}
+          title="Local Models & GGUF Library (Ctrl+Shift+M)"
+          className={`w-12 h-11 flex items-center justify-center relative transition-colors ${
+            activeView === "models"
+              ? "text-white bg-vsc-activityActive"
+              : "hover:text-white"
+          }`}
+        >
+          {activeView === "models" && (
+            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500" />
+          )}
+          <VscPackage className="text-2xl" />
+          {sidecarStatus?.is_running && (
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-green-500 ring-2 ring-vsc-activity" />
+          )}
+        </button>
+
+        {/* llama.cpp Engine */}
+        <button
+          onClick={() => handleViewClick("engine")}
+          title="Engine & Hardware Supervisor (Ctrl+Shift+U)"
+          className={`w-12 h-11 flex items-center justify-center relative transition-colors ${
+            activeView === "engine"
+              ? "text-white bg-vsc-activityActive"
+              : "hover:text-white"
+          }`}
+        >
+          {activeView === "engine" && (
+            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500" />
+          )}
+          <VscServerProcess className="text-2xl" />
         </button>
 
         {/* Terminal Toggle */}

@@ -15,10 +15,16 @@ import { TitleBar } from "./components/layout/TitleBar";
 import { ActivityBar } from "./components/layout/ActivityBar";
 import { ExplorerSidebar } from "./components/explorer/ExplorerSidebar";
 import { SearchSidebar } from "./components/search/SearchSidebar";
+import { ModelsSidebarView } from "./components/models/ModelsSidebarView";
+import { EngineSidebarView } from "./components/engine/EngineSidebarView";
+import { ModelsDashboard } from "./components/models/ModelsDashboard";
+import { EngineDashboard } from "./components/engine/EngineDashboard";
 import { EditorContainer } from "./components/editor/EditorContainer";
 import { TerminalContainer } from "./components/terminal/TerminalContainer";
 import { AgentPanel } from "./components/agent/AgentPanel";
 import { SettingsModal } from "./components/settings/SettingsModal";
+import { useLocalAiStore } from "./store/localAiStore";
+
 
 export const App: React.FC = () => {
   const { setWorkspacePath } = useWorkspaceStore();
@@ -41,6 +47,14 @@ export const App: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const activeModel = providers[activeProvider]?.model || "unknown";
 
+  const {
+    expandedDashboard,
+    sidecarStatus,
+    initListeners,
+    fetchHardwareAndEngine,
+    refreshInstalledModels,
+  } = useLocalAiStore();
+
   const handleSidebarMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsSidebarResizing(true);
@@ -62,10 +76,21 @@ export const App: React.FC = () => {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Initial load workspace
+  // Initial load workspace & local AI state
   useEffect(() => {
     setWorkspacePath("d:\\Development\\TAURI\\Code Lite");
-  }, []);
+    fetchHardwareAndEngine();
+    refreshInstalledModels();
+
+    let cleanup: (() => void) | undefined;
+    initListeners().then((unlisten) => {
+      cleanup = unlisten;
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [fetchHardwareAndEngine, refreshInstalledModels, initListeners]);
 
   // Global keybindings
   useEffect(() => {
@@ -95,6 +120,16 @@ export const App: React.FC = () => {
         e.preventDefault();
         setActiveSidebarView("explorer");
       }
+      // Ctrl+Shift+M: models
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "M") {
+        e.preventDefault();
+        setActiveSidebarView("models");
+      }
+      // Ctrl+Shift+U: engine
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "U") {
+        e.preventDefault();
+        setActiveSidebarView("engine");
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -114,7 +149,7 @@ export const App: React.FC = () => {
           setActiveView={setActiveSidebarView}
         />
 
-        {/* Primary Sidebar (Explorer or Search) - Resizable */}
+        {/* Primary Sidebar (Explorer, Search, Models, or Engine) - Resizable */}
         {activeSidebarView && (
           <aside
             style={{ width: `${sidebarWidth}px` }}
@@ -122,6 +157,8 @@ export const App: React.FC = () => {
           >
             {activeSidebarView === "explorer" && <ExplorerSidebar />}
             {activeSidebarView === "search" && <SearchSidebar />}
+            {activeSidebarView === "models" && <ModelsSidebarView />}
+            {activeSidebarView === "engine" && <EngineSidebarView />}
 
             {/* Right Resize Drag Handle */}
             <div
@@ -170,14 +207,40 @@ export const App: React.FC = () => {
             </>
           )}
 
-          {/* Model Status Pill */}
+          {/* Local Engine Status Indicator */}
+          <div
+            onClick={() => setActiveSidebarView(activeSidebarView === "models" ? null : "models")}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors ${
+              sidecarStatus?.is_running
+                ? "bg-green-900/60 hover:bg-green-800 text-green-300"
+                : "bg-white/5 hover:bg-white/10 text-gray-400"
+            }`}
+            title={
+              sidecarStatus?.is_running
+                ? `Local Engine Active: ${sidecarStatus.current_model || "llama-server"} on port ${sidecarStatus.port}`
+                : "Local Engine Offline - Click to configure models"
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                sidecarStatus?.is_running ? "bg-green-400 animate-pulse" : "bg-gray-500"
+              }`}
+            />
+            <span className="font-mono text-[10px]">
+              {sidecarStatus?.is_running
+                ? `Local: ${sidecarStatus.current_model?.split(/[/\\]/).pop()?.slice(0, 14) || "Active"}`
+                : "Offline Engine"}
+            </span>
+          </div>
+
+          {/* Agent Model Status Pill */}
           <div
             onClick={togglePanel}
             className="flex items-center gap-1 hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer bg-blue-800/60"
             title="Click to toggle Agent panel"
           >
             <VscSparkle className="text-yellow-300" />
-            <span className="font-mono text-[10px]">{activeModel}</span>
+            <span className="font-mono text-[10px] truncate max-w-[120px]">{activeModel}</span>
           </div>
 
           <div className="hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer">
@@ -188,6 +251,10 @@ export const App: React.FC = () => {
 
       {/* Settings Modal */}
       <SettingsModal />
+
+      {/* Full Screen Dashboards */}
+      {expandedDashboard === "models" && <ModelsDashboard />}
+      {expandedDashboard === "engine" && <EngineDashboard />}
     </div>
   );
 };

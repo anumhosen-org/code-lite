@@ -26,7 +26,7 @@ export interface EditorTab {
   diffMode?: boolean;
 }
 
-export type ActiveSidebarView = "explorer" | "search" | null;
+export type ActiveSidebarView = "explorer" | "search" | "models" | "engine" | null;
 
 export interface TerminalProfile {
   id: string;
@@ -35,4 +35,7 @@ export interface TerminalProfile {
   args: string[];
   icon: string;
 }
+
+export * from "./localAi";
+
 
