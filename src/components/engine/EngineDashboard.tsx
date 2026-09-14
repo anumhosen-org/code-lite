@@ -269,25 +269,53 @@ export const EngineDashboard: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        {rel.vulkan_win_url && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Linux CUDA Option */}
+                        {rel.cuda_linux_url && (
                           <button
-                            onClick={() => downloadEngine(rel.vulkan_win_url)}
+                            onClick={() => downloadEngine(rel.cuda_linux_url)}
                             disabled={isDownloadingEngine}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Linux NVIDIA CUDA acceleration"
                           >
                             <VscCloudDownload />
-                            <span>Install Vulkan Build</span>
+                            <span>Linux CUDA Build</span>
                           </button>
                         )}
-                        {rel.cpu_win_url && (
+                        {/* Windows CUDA Option */}
+                        {rel.cuda_win_url && (
                           <button
-                            onClick={() => downloadEngine(rel.cpu_win_url)}
+                            onClick={() => downloadEngine(rel.cuda_win_url)}
                             disabled={isDownloadingEngine}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Windows NVIDIA CUDA acceleration"
                           >
                             <VscCloudDownload />
-                            <span>Install CPU AVX2</span>
+                            <span>Windows CUDA</span>
+                          </button>
+                        )}
+                        {/* Vulkan Option */}
+                        {(rel.vulkan_win_url || rel.vulkan_linux_url) && (
+                          <button
+                            onClick={() => downloadEngine(rel.vulkan_win_url || rel.vulkan_linux_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Universal Vulkan GPU acceleration"
+                          >
+                            <VscCloudDownload />
+                            <span>Install Vulkan</span>
+                          </button>
+                        )}
+                        {/* CPU Option */}
+                        {(rel.cpu_win_url || rel.cpu_linux_url || rel.fallback_url) && (
+                          <button
+                            onClick={() => downloadEngine(rel.cpu_win_url || rel.cpu_linux_url || rel.fallback_url)}
+                            disabled={isDownloadingEngine}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors disabled:opacity-50"
+                            title="CPU fallback build"
+                          >
+                            <VscCloudDownload />
+                            <span>CPU AVX2</span>
                           </button>
                         )}
                       </div>

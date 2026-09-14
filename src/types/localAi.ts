@@ -40,6 +40,10 @@ export interface LlamaBuildRelease {
   cuda_win_url: string;
   cuda_12_4_win_url: string;
   cuda_13_3_win_url: string;
+  cuda_linux_url: string;
+  cuda_linux_12_4_url: string;
+  vulkan_linux_url: string;
+  cpu_linux_url: string;
   hip_win_url: string;
   sycl_win_url: string;
   assets: LlamaAsset[];

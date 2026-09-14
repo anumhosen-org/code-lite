@@ -51,6 +51,10 @@ pub struct LlamaBuildRelease {
     pub cuda_win_url: String,
     pub cuda_12_4_win_url: String,
     pub cuda_13_3_win_url: String,
+    pub cuda_linux_url: String,
+    pub cuda_linux_12_4_url: String,
+    pub vulkan_linux_url: String,
+    pub cpu_linux_url: String,
     pub hip_win_url: String,
     pub sycl_win_url: String,
     pub assets: Vec<LlamaAsset>,
@@ -153,6 +157,10 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
             let mut cuda_win_url = String::new();
             let mut cuda_12_4_win_url = String::new();
             let mut cuda_13_3_win_url = String::new();
+            let mut cuda_linux_url = String::new();
+            let mut cuda_linux_12_4_url = String::new();
+            let mut vulkan_linux_url = String::new();
+            let mut cpu_linux_url = String::new();
             let mut hip_win_url = String::new();
             let mut sycl_win_url = String::new();
 
@@ -168,13 +176,21 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
                     let download_url = asset["browser_download_url"].as_str().unwrap_or("").to_string();
                     let size_bytes = asset["size"].as_u64().unwrap_or(0);
 
-                    if !name_lower.ends_with(".zip") {
+                    let is_zip = name_lower.ends_with(".zip");
+                    let is_tar = name_lower.ends_with(".tar.gz") || name_lower.ends_with(".tgz");
+                    if !is_zip && !is_tar {
+                        continue;
+                    }
+
+                    let is_cudart = name_lower.starts_with("cudart");
+                    let is_bin_package = name_lower.contains("-bin-");
+                    if !is_bin_package {
                         continue;
                     }
 
                     // Windows assets
                     if name_lower.contains("win") {
-                        let mut asset_type = "win_other".to_string();
+                        let mut asset_type = if is_cudart { "cudart_runtime".to_string() } else { "win_other".to_string() };
 
                         if name_lower.contains("vulkan") {
                             vulkan_win_url = download_url.clone();
@@ -182,17 +198,26 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
                         } else if name_lower.contains("cpu") || name_lower.contains("avx2") {
                             cpu_win_url = download_url.clone();
                             asset_type = "cpu".to_string();
-                        } else if name_lower.contains("cuda-12.4") {
-                            cuda_12_4_win_url = download_url.clone();
-                            cuda_win_url = download_url.clone();
-                            asset_type = "cuda_12_4".to_string();
-                        } else if name_lower.contains("cuda-13.3") || name_lower.contains("cuda-13") {
-                            cuda_13_3_win_url = download_url.clone();
-                            if cuda_win_url.is_empty() {
+                        } else if name_lower.contains("cuda-12") || name_lower.contains("cu12") {
+                            if !is_cudart {
+                                cuda_12_4_win_url = download_url.clone();
                                 cuda_win_url = download_url.clone();
                             }
-                            asset_type = "cuda_13_3".to_string();
-                        } else if name_lower.contains("hip") || name_lower.contains("radeon") {
+                            asset_type = if is_cudart { "cudart_12".to_string() } else { "cuda_12".to_string() };
+                        } else if name_lower.contains("cuda-13") || name_lower.contains("cu13") {
+                            if !is_cudart {
+                                cuda_13_3_win_url = download_url.clone();
+                                if cuda_win_url.is_empty() {
+                                    cuda_win_url = download_url.clone();
+                                }
+                            }
+                            asset_type = if is_cudart { "cudart_13".to_string() } else { "cuda_13".to_string() };
+                        } else if name_lower.contains("cuda") {
+                            if !is_cudart && cuda_win_url.is_empty() {
+                                cuda_win_url = download_url.clone();
+                            }
+                            asset_type = if is_cudart { "cudart".to_string() } else { "cuda".to_string() };
+                        } else if name_lower.contains("hip") || name_lower.contains("rocm") || name_lower.contains("radeon") {
                             hip_win_url = download_url.clone();
                             asset_type = "hip_radeon".to_string();
                         } else if name_lower.contains("sycl") {
@@ -237,14 +262,47 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
                         }
                     }
 
-                    // Linux assets
+                    // Linux assets (Ubuntu / Debian / General Linux)
                     if name_lower.contains("ubuntu") || (name_lower.contains("linux") && !name_lower.contains("win")) {
                         let is_arm64 = name_lower.contains("arm64") || name_lower.contains("aarch64");
-                        let asset_type = if is_arm64 {
+                        let is_cuda = name_lower.contains("cuda");
+                        let is_vulkan = name_lower.contains("vulkan");
+                        let is_rocm = name_lower.contains("rocm");
+
+                        let asset_type = if is_cuda {
+                            if is_cudart {
+                                "linux_cudart_runtime".to_string()
+                            } else if name_lower.contains("12") {
+                                "linux_cuda_12".to_string()
+                            } else if name_lower.contains("13") {
+                                "linux_cuda_13".to_string()
+                            } else {
+                                "linux_cuda".to_string()
+                            }
+                        } else if is_vulkan {
+                            "linux_vulkan".to_string()
+                        } else if is_rocm {
+                            "linux_rocm".to_string()
+                        } else if is_arm64 {
                             "linux_arm64".to_string()
                         } else {
-                            "linux_x64".to_string()
+                            "linux_cpu_x64".to_string()
                         };
+
+                        if is_cuda {
+                            if !is_cudart {
+                                if cuda_linux_url.is_empty() || name_lower.contains("12") {
+                                    cuda_linux_url = download_url.clone();
+                                }
+                                if name_lower.contains("12") {
+                                    cuda_linux_12_4_url = download_url.clone();
+                                }
+                            }
+                        } else if is_vulkan {
+                            vulkan_linux_url = download_url.clone();
+                        } else if !is_arm64 && cpu_linux_url.is_empty() && !is_rocm && !name_lower.contains("sycl") && !name_lower.contains("openvino") && !name_lower.contains("s390x") {
+                            cpu_linux_url = download_url.clone();
+                        }
 
                         if target_os == "linux" {
                             asset_list.push(LlamaAsset {
@@ -265,12 +323,23 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
                     recommended_url = cpu_win_url.clone();
                 }
                 fallback_url = cpu_win_url.clone();
+            } else if target_os == "linux" {
+                if !cuda_linux_url.is_empty() {
+                    recommended_url = cuda_linux_url.clone();
+                } else if !vulkan_linux_url.is_empty() {
+                    recommended_url = vulkan_linux_url.clone();
+                } else if !cpu_linux_url.is_empty() {
+                    recommended_url = cpu_linux_url.clone();
+                }
+                fallback_url = cpu_linux_url.clone();
             }
 
             let recommended_label = if target_os == "windows" {
                 "Vulkan (AMD/NVIDIA/Intel GPU Acceleration)".to_string()
             } else if target_os == "macos" {
                 "Apple Metal (Unified Memory Apple Silicon)".to_string()
+            } else if !cuda_linux_url.is_empty() {
+                "NVIDIA CUDA (Linux GPU Acceleration)".to_string()
             } else {
                 "Linux Default Build".to_string()
             };
@@ -297,6 +366,10 @@ pub async fn fetch_llama_releases() -> Result<Vec<LlamaBuildRelease>, String> {
                 cuda_win_url,
                 cuda_12_4_win_url,
                 cuda_13_3_win_url,
+                cuda_linux_url,
+                cuda_linux_12_4_url,
+                vulkan_linux_url,
+                cpu_linux_url,
                 hip_win_url,
                 sycl_win_url,
                 assets: asset_list,
@@ -312,7 +385,13 @@ pub async fn download_llama_engine(
     download_url: String,
 ) -> Result<String, String> {
     let bin_dir = get_bin_dir();
-    let zip_path = bin_dir.join("llama-server-engine.zip");
+    let is_tar_gz = download_url.ends_with(".tar.gz") || download_url.ends_with(".tgz");
+    let archive_name = if is_tar_gz {
+        "llama-server-engine.tar.gz"
+    } else {
+        "llama-server-engine.zip"
+    };
+    let archive_path = bin_dir.join(archive_name);
 
     let client = reqwest::Client::new();
     let res = client
@@ -323,7 +402,7 @@ pub async fn download_llama_engine(
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
     let total_bytes = res.content_length().unwrap_or(0);
-    let mut file = File::create(&zip_path).map_err(|e| format!("File creation failed: {}", e))?;
+    let mut file = File::create(&archive_path).map_err(|e| format!("File creation failed: {}", e))?;
     let mut downloaded: u64 = 0;
     let mut stream = res.bytes_stream();
     let start_time = std::time::Instant::now();
@@ -351,7 +430,7 @@ pub async fn download_llama_engine(
             DownloadProgressPayload {
                 task_id: "engine_download".to_string(),
                 task_type: "engine".to_string(),
-                filename: "llama-server-engine.zip".to_string(),
+                filename: archive_name.to_string(),
                 bytes_downloaded: downloaded,
                 total_bytes,
                 progress_percent: (percent * 10.0).round() / 10.0,
@@ -361,35 +440,55 @@ pub async fn download_llama_engine(
             },
         );
     }
+    drop(file);
 
-    // Extract zip
-    let file = File::open(&zip_path).map_err(|e| format!("Failed opening downloaded zip: {}", e))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| format!("Failed parsing zip: {}", e))?;
+    if is_tar_gz {
+        // Native tar extraction supported on Linux, macOS, and Windows 10+
+        let status = std::process::Command::new("tar")
+            .arg("-xzf")
+            .arg(&archive_path)
+            .arg("-C")
+            .arg(&bin_dir)
+            .status()
+            .map_err(|e| format!("Failed executing tar extraction: {}", e))?;
 
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
-        let outpath = match file.enclosed_name() {
-            Some(path) => bin_dir.join(path),
-            None => continue,
-        };
+        if !status.success() {
+            return Err(format!("tar extraction failed with code: {:?}", status.code()));
+        }
+    } else {
+        let file = File::open(&archive_path).map_err(|e| format!("Failed opening downloaded zip: {}", e))?;
+        let mut archive = ZipArchive::new(file).map_err(|e| format!("Failed parsing zip: {}", e))?;
 
-        if file.name().ends_with('/') {
-            let _ = std::fs::create_dir_all(&outpath);
-        } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    let _ = std::fs::create_dir_all(p);
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+            let outpath = match file.enclosed_name() {
+                Some(path) => bin_dir.join(path),
+                None => continue,
+            };
+
+            if file.name().ends_with('/') {
+                let _ = std::fs::create_dir_all(&outpath);
+            } else {
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        let _ = std::fs::create_dir_all(p);
+                    }
                 }
+                let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+                std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
             }
-            let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
-            std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
 
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let name = outpath.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                if name.starts_with("llama-") || outpath.extension().is_none() {
-                    let _ = std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(0o755));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(entries) = std::fs::read_dir(&bin_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                if name.starts_with("llama-") || path.extension().is_none() {
+                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
                 }
             }
         }
@@ -408,8 +507,8 @@ pub async fn download_llama_engine(
         DownloadProgressPayload {
             task_id: "engine_download".to_string(),
             task_type: "engine".to_string(),
-            filename: "llama-server-engine.zip".to_string(),
-            bytes_downloaded: downloaded,
+            filename: archive_name.to_string(),
+            bytes_downloaded: total_bytes,
             total_bytes,
             progress_percent: 100.0,
             speed_mbps: 0.0,

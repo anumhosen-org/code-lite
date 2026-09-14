@@ -28,7 +28,7 @@ export const EngineSidebarView: React.FC = () => {
     setExpandedDashboard,
   } = useLocalAiStore();
 
-  const [selectedBuildType, setSelectedBuildType] = useState<"vulkan" | "cpu">("vulkan");
+  const [selectedBuildType, setSelectedBuildType] = useState<"cuda" | "vulkan" | "cpu">("cuda");
 
   useEffect(() => {
     fetchHardwareAndEngine();
@@ -40,9 +40,11 @@ export const EngineSidebarView: React.FC = () => {
   const handleDownloadLatest = () => {
     if (!latestRelease) return;
     const url =
-      selectedBuildType === "vulkan"
-        ? latestRelease.vulkan_win_url || latestRelease.recommended_url
-        : latestRelease.cpu_win_url || latestRelease.fallback_url;
+      selectedBuildType === "cuda"
+        ? latestRelease.cuda_linux_url || latestRelease.cuda_win_url || latestRelease.recommended_url
+        : selectedBuildType === "vulkan"
+        ? latestRelease.vulkan_linux_url || latestRelease.vulkan_win_url || latestRelease.recommended_url
+        : latestRelease.cpu_linux_url || latestRelease.cpu_win_url || latestRelease.fallback_url;
 
     if (url) {
       downloadEngine(url).catch((err) => alert(`Download failed: ${err}`));
@@ -145,14 +147,26 @@ export const EngineSidebarView: React.FC = () => {
               {/* Build Type Toggle */}
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => setSelectedBuildType("cuda")}
+                  className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
+                    selectedBuildType === "cuda"
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-800 text-gray-400 hover:text-white"
+                  }`}
+                  title="NVIDIA CUDA acceleration (Linux / Windows)"
+                >
+                  CUDA
+                </button>
+                <button
                   onClick={() => setSelectedBuildType("vulkan")}
                   className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
                     selectedBuildType === "vulkan"
                       ? "bg-blue-600 text-white"
                       : "bg-gray-800 text-gray-400 hover:text-white"
                   }`}
+                  title="Universal Vulkan GPU acceleration"
                 >
-                  Vulkan (GPU)
+                  Vulkan
                 </button>
                 <button
                   onClick={() => setSelectedBuildType("cpu")}
@@ -161,8 +175,9 @@ export const EngineSidebarView: React.FC = () => {
                       ? "bg-blue-600 text-white"
                       : "bg-gray-800 text-gray-400 hover:text-white"
                   }`}
+                  title="CPU AVX2 fallback"
                 >
-                  CPU AVX2
+                  CPU
                 </button>
               </div>
 

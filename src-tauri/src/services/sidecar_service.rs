@@ -124,6 +124,23 @@ pub fn start_sidecar_internal(
         .to_string();
 
     let mut cmd = Command::new(&exe_path);
+    if let Some(parent) = Path::new(&exe_path).parent() {
+        #[cfg(unix)]
+        {
+            let current_ld = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+            let new_ld = if current_ld.is_empty() {
+                parent.to_string_lossy().to_string()
+            } else {
+                format!("{}:{}", parent.to_string_lossy(), current_ld)
+            };
+            cmd.env("LD_LIBRARY_PATH", new_ld);
+        }
+        #[cfg(windows)]
+        {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            cmd.env("PATH", format!("{};{}", parent.to_string_lossy(), current_path));
+        }
+    }
     cmd.arg("-m")
         .arg(model_path)
         .arg("--host")
