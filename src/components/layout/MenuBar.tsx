@@ -216,12 +216,21 @@ export const MenuBar: React.FC = () => {
           action: () => setActiveSidebarView("engine"),
         },
         {
+          label: "Tauri Knowledge & MCP Hub",
+          shortcut: "Ctrl+Shift+K",
+          action: () => setActiveSidebarView("knowledge"),
+        },
+        {
           label: "Open Models Dashboard",
           action: () => setExpandedDashboard("models"),
         },
         {
           label: "Open Engine Dashboard",
           action: () => setExpandedDashboard("engine"),
+        },
+        {
+          label: "Open Knowledge Dashboard",
+          action: () => setExpandedDashboard("knowledge"),
         },
         { separator: true, label: "" },
         {
@@ -276,6 +285,10 @@ export const MenuBar: React.FC = () => {
         {
           label: "Manage llama.cpp Engine...",
           action: () => setExpandedDashboard("engine"),
+        },
+        {
+          label: "Offline Knowledge & MCP Hub...",
+          action: () => setExpandedDashboard("knowledge"),
         },
         { separator: true, label: "" },
         {

@@ -6,6 +6,7 @@ use commands::search_commands::*;
 use commands::terminal_commands::*;
 use commands::window_commands::*;
 use commands::engine_commands::*;
+use commands::knowledge_commands::*;
 use services::pty_service::PtyServiceState;
 use services::sidecar_service::{SidecarState, stop_sidecar_internal};
 use tauri::Manager;
@@ -18,6 +19,9 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize offline SQLite knowledge database
+    let _ = services::knowledge_service::init_knowledge_db();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(PtyServiceState::new())
@@ -64,6 +68,13 @@ pub fn run() {
             start_sidecar,
             stop_sidecar,
             get_sidecar_status,
+            // Offline Knowledge & MCP commands
+            query_tauri_knowledge,
+            list_all_tauri_knowledge,
+            index_workspace_code,
+            semantic_search_code,
+            list_mcp_tools,
+            enrich_prompt_context,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

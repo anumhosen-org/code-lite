@@ -17,6 +17,8 @@ import { ExplorerSidebar } from "./components/explorer/ExplorerSidebar";
 import { SearchSidebar } from "./components/search/SearchSidebar";
 import { ModelsSidebarView } from "./components/models/ModelsSidebarView";
 import { EngineSidebarView } from "./components/engine/EngineSidebarView";
+import { KnowledgeSidebarView } from "./components/knowledge/KnowledgeSidebarView";
+import { KnowledgeDashboard } from "./components/knowledge/KnowledgeDashboard";
 import { ModelsDashboard } from "./components/models/ModelsDashboard";
 import { EngineDashboard } from "./components/engine/EngineDashboard";
 import { EditorContainer } from "./components/editor/EditorContainer";
@@ -130,6 +132,11 @@ export const App: React.FC = () => {
         e.preventDefault();
         setActiveSidebarView("engine");
       }
+      // Ctrl+Shift+K: knowledge
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "K") {
+        e.preventDefault();
+        setActiveSidebarView("knowledge");
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -149,7 +156,7 @@ export const App: React.FC = () => {
           setActiveView={setActiveSidebarView}
         />
 
-        {/* Primary Sidebar (Explorer, Search, Models, or Engine) - Resizable */}
+        {/* Primary Sidebar (Explorer, Search, Models, Engine, Knowledge) - Resizable */}
         {activeSidebarView && (
           <aside
             style={{ width: `${sidebarWidth}px` }}
@@ -159,6 +166,7 @@ export const App: React.FC = () => {
             {activeSidebarView === "search" && <SearchSidebar />}
             {activeSidebarView === "models" && <ModelsSidebarView />}
             {activeSidebarView === "engine" && <EngineSidebarView />}
+            {activeSidebarView === "knowledge" && <KnowledgeSidebarView />}
 
             {/* Right Resize Drag Handle */}
             <div
@@ -255,6 +263,7 @@ export const App: React.FC = () => {
       {/* Full Screen Dashboards */}
       {expandedDashboard === "models" && <ModelsDashboard />}
       {expandedDashboard === "engine" && <EngineDashboard />}
+      {expandedDashboard === "knowledge" && <KnowledgeDashboard />}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { AgentToolDefinition } from "../types";
 import { fsService } from "../../tauri/fs";
 import { searchService } from "../../tauri/search";
@@ -79,6 +80,29 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         command: { type: "string", description: "The command to run, e.g. 'cargo build' or 'npm test'." },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "lookup_tauri_knowledge",
+    description: "Search offline SQLite knowledge base for Tauri v2 architectural recipes, IPC patterns, and compiler error playbooks.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search keyword or error code (e.g. 'mutex', 'borrow checker', 'capabilities', 'window drag')." },
+        category: { type: "string", description: "Optional category: 'compiler_errors', 'state_management', 'ipc_commands', 'tauri_architecture', 'window_lifecycle'." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "semantic_code_search",
+    description: "Perform fast semantic search across indexed workspace source code.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query or natural language concept to locate in the project." },
+      },
+      required: ["query"],
     },
   },
 ];
@@ -212,6 +236,44 @@ export async function executeAgentTool(
         return `Command submitted to Agent Terminal: '${command}'`;
       } catch (err: any) {
         return `Error running command: ${err.message || String(err)}`;
+      }
+    }
+
+    case "lookup_tauri_knowledge": {
+      try {
+        const results = await invoke<any[]>("query_tauri_knowledge", {
+          query: args.query,
+          category: args.category || null,
+          limit: 3,
+        });
+        if (!results || results.length === 0) {
+          return `No specific offline knowledge recipes found for "${args.query}".`;
+        }
+        return results
+          .map(
+            (r) =>
+              `### [${r.category.toUpperCase()}] ${r.title}\n${r.description}\n\n**Solution Pattern:**\n${r.solution}\n\n**Code Snippet:**\n\`\`\`rust\n${r.code_snippet}\n\`\`\``
+          )
+          .join("\n\n---\n\n");
+      } catch (err: any) {
+        return `Error searching knowledge base: ${err.message || String(err)}`;
+      }
+    }
+
+    case "semantic_code_search": {
+      try {
+        const results = await invoke<any[]>("semantic_search_code", {
+          query: args.query,
+          limit: 5,
+        });
+        if (!results || results.length === 0) {
+          return `No semantic code matches found for "${args.query}". Use grep_search for exact keyword searching.`;
+        }
+        return results
+          .map((r) => `File: ${r.relative_path}:${r.line_number}\n\`\`\`\n${r.snippet}\n\`\`\``)
+          .join("\n\n---\n\n");
+      } catch (err: any) {
+        return `Error in semantic code search: ${err.message || String(err)}`;
       }
     }
 

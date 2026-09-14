@@ -25,7 +25,7 @@ interface LocalAiState {
   isDownloadingModel: boolean;
   isLoadingReleases: boolean;
   isLoadingModels: boolean;
-  expandedDashboard: "models" | "engine" | null;
+  expandedDashboard: "models" | "engine" | "knowledge" | null;
 
   // Actions
   fetchHardwareAndEngine: () => Promise<void>;
@@ -46,7 +46,7 @@ interface LocalAiState {
   stopModelSidecar: () => Promise<void>;
   refreshSidecarStatus: () => Promise<void>;
   setCustomModelsDir: (dir: string) => void;
-  setExpandedDashboard: (view: "models" | "engine" | null) => void;
+  setExpandedDashboard: (view: "models" | "engine" | "knowledge" | null) => void;
   initListeners: () => Promise<UnlistenFn>;
 }
 

@@ -7,6 +7,7 @@ import {
   VscSettingsGear,
   VscPackage,
   VscServerProcess,
+  VscBook,
 } from "react-icons/vsc";
 import { ActiveSidebarView } from "../../types";
 import { useTerminalStore } from "../../store/terminalStore";
@@ -110,6 +111,22 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500" />
           )}
           <VscServerProcess className="text-2xl" />
+        </button>
+
+        {/* Offline Knowledge & MCP */}
+        <button
+          onClick={() => handleViewClick("knowledge")}
+          title="Tauri Knowledge Base & MCP Hub (Ctrl+Shift+K)"
+          className={`w-12 h-11 flex items-center justify-center relative transition-colors ${
+            activeView === "knowledge"
+              ? "text-white bg-vsc-activityActive"
+              : "hover:text-white"
+          }`}
+        >
+          {activeView === "knowledge" && (
+            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500" />
+          )}
+          <VscBook className="text-2xl" />
         </button>
 
         {/* Terminal Toggle */}

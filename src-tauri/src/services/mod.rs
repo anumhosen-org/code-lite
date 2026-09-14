@@ -6,4 +6,9 @@ pub mod hardware_service;
 pub mod engine_service;
 pub mod model_service;
 pub mod sidecar_service;
+pub mod knowledge_service;
+pub mod embedding_service;
+pub mod mcp_service;
+pub mod ai_proxy_service;
+
 

@@ -26,7 +26,7 @@ export interface EditorTab {
   diffMode?: boolean;
 }
 
-export type ActiveSidebarView = "explorer" | "search" | "models" | "engine" | null;
+export type ActiveSidebarView = "explorer" | "search" | "models" | "engine" | "knowledge" | null;
 
 export interface TerminalProfile {
   id: string;
